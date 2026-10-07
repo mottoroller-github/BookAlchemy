@@ -1,16 +1,63 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
-  </head>
-  <body>
+    <title>Library</title>
+</head>
 
-    {% for book in books %}
-    <div> <h3>{{ book.title }}</h3>
-    </div>
-    {% endfor %}
+<body>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <p>{{ message }}</p>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
 
-  </body>
+    <h1>Library</h1>
+
+    <form action="/" method="GET">
+        <label for="search">Search:</label>
+        <input type="text" id="search" name="search" value="{{ search }}" placeholder="Search for a book...">
+        <button type="submit">Search</button>
+    </form>
+
+    <br>
+
+    <form action="/" method="GET">
+        <label for="sort">Sort by:</label>
+        <select id="sort" name="sort" onchange="this.form.submit()">
+            <option value="title" {% if current_sort == "title" %}selected{% endif %}> Title</option>
+            <option value="author" {% if current_sort == "author" %}selected{% endif %}> Author</option>
+        </select>
+    </form>
+
+    <hr>
+
+    {% if books %}
+        {% for book in books %}
+            <div>
+                <img src="https://covers.openlibrary.org/b/isbn/{{ book.isbn }}-M.jpg" alt="Cover of {{ book.title }}">
+
+                <h3>{{ book.title }}</h3>
+                <p>Author: {{ book.author.name }}</p>
+                <p>ISBN: {{ book.isbn }}</p>
+                <p>Published: {{ book.publication_year }}</p>
+
+                <form action="{{ url_for('delete_book', book_id=book.id) }}" method="POST">
+                    <button type="submit">Delete Book</button>
+                </form>
+            </div>
+        {% endfor %}
+
+    {% else %}
+        {% if search %}
+            <p>No books found for "{{ search }}".</p>
+        {% else %}
+            <p>No books available.</p>
+        {% endif %}
+    {% endif %}
+
+</body>
 </html>
