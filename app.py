@@ -24,6 +24,9 @@ def index():
     search = request.args.get("search", "").strip()
     sort = request.args.get("sort", "title")
 
+    if sort not in ("title", "author"):
+        sort = "title"
+
     statement = select(Book)
 
     if search:
@@ -41,14 +44,35 @@ def index():
 @app.route('/add_author', methods=['GET', 'POST'])
 def add_author():
     if request.method == 'POST':
-        name = request.form["name"]
-        birth_date = date.fromisoformat(request.form["birthdate"])
-        date_of_death_value = request.form.get("date_of_death")
-        date_of_death = (
-            date.fromisoformat(date_of_death_value)
-            if date_of_death_value
-            else None
-        )
+        name = request.form.get("name", "").strip()
+        birthdate_value = request.form.get("birthdate", "").strip()
+        date_of_death_value = request.form.get("date_of_death", "").strip()
+
+        if not name:
+            return render_template("add_author.html", error_message="Name is required.")
+        if not birthdate_value:
+            return render_template("add_author.html", error_message="Birth date is required.")
+
+        try:
+            birth_date = date.fromisoformat(birthdate_value)
+        except ValueError:
+            return render_template("add_author.html", error_message="Invalid birth date.")
+
+        if birth_date > date.today():
+            return render_template("add_author.html", error_message="Birth date cannot be in the future.")
+
+        if date_of_death_value:
+            try:
+                date_of_death = date.fromisoformat(date_of_death_value)
+            except ValueError:
+                return render_template("add_author.html", error_message="Invalid date of death.")
+
+            if date_of_death > date.today():
+                return render_template("add_author.html", error_message="Date of death cannot be in the future.")
+            if date_of_death < birth_date:
+                return render_template("add_author.html", error_message="Date of death cannot be before birth date.")
+        else:
+            date_of_death = None
 
         author = Author(name=name, birth_date=birth_date, date_of_death=date_of_death)
 
@@ -63,10 +87,40 @@ def add_book():
     authors = db.session.scalars(select(Author)).all()
 
     if request.method == 'POST':
-        author_id = int(request.form["author_id"])
-        isbn = request.form["isbn"]
-        title = request.form["title"]
-        publication_year = int(request.form["publication_year"])
+        title = request.form.get("title", "").strip()
+        isbn = request.form.get("isbn", "").strip()
+        publication_year_value = request.form.get("publication_year", "").strip()
+        author_id_value = request.form.get("author_id", "").strip()
+
+        if not title:
+            return render_template("add_book.html", authors=authors, error_message="Title is required.")
+        if not isbn:
+            return render_template("add_book.html", authors=authors, error_message="ISBN is required.")
+        if not publication_year_value:
+            return render_template("add_book.html", authors=authors, error_message="Publication year is required.")
+
+        try:
+            publication_year = int(publication_year_value)
+        except ValueError:
+            return render_template("add_book.html", authors=authors, error_message="Publication year must be a number.")
+
+        if publication_year < 1:
+            return render_template("add_book.html", authors=authors, error_message="Publication year must be greater than 0.")
+        if publication_year > date.today().year:
+            return render_template("add_book.html", authors=authors, error_message="Publication year cannot be in the future.")
+
+        if not author_id_value:
+            return render_template("add_book.html", authors=authors, error_message="Author is required.")
+
+        try:
+            author_id = int(author_id_value)
+        except ValueError:
+            return render_template("add_book.html", authors=authors, error_message="Invalid author.")
+
+        author = db.session.get(Author, author_id)
+
+        if author is None:
+            return render_template("add_book.html", authors=authors, error_message="Selected author does not exist.")
 
         book = Book(author_id=author_id, isbn=isbn, title=title, publication_year=publication_year)
 
