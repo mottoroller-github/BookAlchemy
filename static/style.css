@@ -18,6 +18,22 @@ form {
     margin-bottom: 20px;
 }
 
+nav {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+nav a {
+    color: #007bff;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+nav a:hover {
+    text-decoration: underline;
+}
+
 input,
 select,
 button {

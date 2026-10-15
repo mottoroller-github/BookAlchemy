@@ -9,6 +9,10 @@
 </head>
 <body>
 
+<nav>
+    <a href="{{ url_for('index') }}">Back to Library</a>
+</nav>
+
 <div class="form-container">
     {% if success_message %}
     <p>{{ success_message }}</p>

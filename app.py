@@ -1,8 +1,10 @@
+"""Flask application for managing a library of books and authors."""
 from datetime import date
 from pathlib import Path
 
 from flask import Flask, flash, redirect, render_template, request, url_for
-from sqlalchemy import delete, select
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from data_models import db, Author, Book
 
@@ -19,8 +21,10 @@ db.init_app(app)
 with app.app_context():
     db.create_all()
 
+
 @app.route("/")
 def index():
+    """Display books with optional search and sorting."""
     search = request.args.get("search", "").strip()
     sort = request.args.get("sort", "title")
 
@@ -39,51 +43,80 @@ def index():
 
     books = db.session.scalars(statement).all()
 
-    return render_template("home.html", books=books, current_sort=sort, search=search)
+    return render_template("home.html",
+                           books=books,
+                           current_sort=sort,
+                           search=search)
+
 
 @app.route('/add_author', methods=['GET', 'POST'])
 def add_author():
+    """Display the author form and handle author creation."""
     if request.method == 'POST':
         name = request.form.get("name", "").strip()
         birthdate_value = request.form.get("birthdate", "").strip()
         date_of_death_value = request.form.get("date_of_death", "").strip()
 
         if not name:
-            return render_template("add_author.html", error_message="Name is required.")
+            return render_template("add_author.html",
+                                   error_message="Name is required.")
         if not birthdate_value:
-            return render_template("add_author.html", error_message="Birth date is required.")
+            return render_template("add_author.html",
+                                   error_message="Birth date is required.")
 
         try:
             birth_date = date.fromisoformat(birthdate_value)
         except ValueError:
-            return render_template("add_author.html", error_message="Invalid birth date.")
+            return render_template("add_author.html",
+                                   error_message="Invalid birth date.")
 
         if birth_date > date.today():
-            return render_template("add_author.html", error_message="Birth date cannot be in the future.")
+            return render_template("add_author.html",
+                                   error_message="Birth date cannot be in the future.")
 
         if date_of_death_value:
             try:
                 date_of_death = date.fromisoformat(date_of_death_value)
             except ValueError:
-                return render_template("add_author.html", error_message="Invalid date of death.")
+                return render_template("add_author.html",
+                                       error_message="Invalid date of death.")
 
             if date_of_death > date.today():
-                return render_template("add_author.html", error_message="Date of death cannot be in the future.")
+                return render_template("add_author.html",
+                                       error_message="Date of death cannot be in the future.")
             if date_of_death < birth_date:
-                return render_template("add_author.html", error_message="Date of death cannot be before birth date.")
+                return render_template("add_author.html",
+                                       error_message="Date of death cannot be before birth date.")
         else:
             date_of_death = None
 
-        author = Author(name=name, birth_date=birth_date, date_of_death=date_of_death)
+        existing_author = db.session.scalar(select(Author).where(Author.name == name))
+
+        if existing_author:
+            return render_template("add_author.html",
+                                   error_message="An author with this name already exists.")
+
+        author = Author(name=name,
+                        birth_date=birth_date,
+                        date_of_death=date_of_death)
 
         db.session.add(author)
-        db.session.commit()
 
-        return render_template('add_author.html', success_message="Author successfully added!")
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            return render_template("add_author.html",
+                                   error_message="An author with this name already exists.")
+
+        return render_template("add_author.html",
+                               success_message="Author successfully added!")
     return render_template('add_author.html')
+
 
 @app.route('/add_book', methods=['GET', 'POST'])
 def add_book():
+    """Display the book form and handle book creation."""
     authors = db.session.scalars(select(Author)).all()
 
     if request.method == 'POST':
@@ -93,45 +126,85 @@ def add_book():
         author_id_value = request.form.get("author_id", "").strip()
 
         if not title:
-            return render_template("add_book.html", authors=authors, error_message="Title is required.")
+            return render_template("add_book.html",
+                                   authors=authors,
+                                   error_message="Title is required.")
         if not isbn:
-            return render_template("add_book.html", authors=authors, error_message="ISBN is required.")
+            return render_template("add_book.html",
+                                   authors=authors,
+                                   error_message="ISBN is required.")
         if not publication_year_value:
-            return render_template("add_book.html", authors=authors, error_message="Publication year is required.")
+            return render_template("add_book.html",
+                                   authors=authors,
+                                   error_message="Publication year is required.")
 
         try:
             publication_year = int(publication_year_value)
         except ValueError:
-            return render_template("add_book.html", authors=authors, error_message="Publication year must be a number.")
+            return render_template("add_book.html",
+                                   authors=authors,
+                                   error_message="Publication year must be a number.")
 
         if publication_year < 1:
-            return render_template("add_book.html", authors=authors, error_message="Publication year must be greater than 0.")
+            return render_template("add_book.html",
+                                   authors=authors,
+                                   error_message="Publication year must be greater than 0.")
         if publication_year > date.today().year:
-            return render_template("add_book.html", authors=authors, error_message="Publication year cannot be in the future.")
+            return render_template("add_book.html",
+                                   authors=authors,
+                                   error_message="Publication year cannot be in the future.")
 
         if not author_id_value:
-            return render_template("add_book.html", authors=authors, error_message="Author is required.")
+            return render_template("add_book.html",
+                                   authors=authors,
+                                   error_message="Author is required.")
 
         try:
             author_id = int(author_id_value)
         except ValueError:
-            return render_template("add_book.html", authors=authors, error_message="Invalid author.")
+            return render_template("add_book.html",
+                                   authors=authors,
+                                   error_message="Invalid author.")
 
         author = db.session.get(Author, author_id)
 
         if author is None:
-            return render_template("add_book.html", authors=authors, error_message="Selected author does not exist.")
+            return render_template("add_book.html",
+                                   authors=authors,
+                                   error_message="Selected author does not exist.")
 
-        book = Book(author_id=author_id, isbn=isbn, title=title, publication_year=publication_year)
+        existing_book = db.session.scalar(select(Book).where(Book.isbn == isbn))
+
+        if existing_book:
+            return render_template("add_book.html",
+                                   authors=authors,
+                                   error_message="A book with this ISBN already exists.")
+
+        book = Book(author_id=author_id,
+                    isbn=isbn,
+                    title=title,
+                    publication_year=publication_year)
 
         db.session.add(book)
-        db.session.commit()
 
-        return render_template('add_book.html', authors=authors, success_message="Book successfully added!")
-    return render_template('add_book.html', authors=authors)
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            return render_template("add_book.html",
+                                   authors=authors,
+                                   error_message="A book with this ISBN already exists.")
+
+        return render_template("add_book.html",
+                               authors=authors,
+                               success_message="Book successfully added!")
+    return render_template('add_book.html',
+                           authors=authors)
+
 
 @app.route("/book/<int:book_id>/delete", methods=["POST"])
 def delete_book(book_id):
+    """Delete a book and remove its author if no books remain."""
     book = db.session.get(Book, book_id)
 
     if book is None:
